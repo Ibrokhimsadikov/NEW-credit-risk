@@ -1,0 +1,329 @@
+---
+title: "Untitled"
+author: "SIR"
+date: "November 3, 2019"
+output: html_document
+---
+
+```{r include=FALSE}
+library(dplyr) 
+library(tidyr)
+library(data.table)
+library(skimr)
+library(recipes)
+library(ggplot2)
+library(purrr)
+library(data.table)
+library(skimr)
+library(recipes)
+library(ggplot2)
+library(sjmisc)
+library(haven)
+```
+
+
+```{r}
+bureau<- fread("./bureau.csv")
+bbalance<- fread("./bureau_balance.csv")
+cc_balance <- fread("./credit_card_balance.csv")
+payments <- fread("./installments_payments.csv") 
+pc_balance <- fread("./POS_CASH_balance.csv")
+prev <- fread("./previous_application.csv")
+app <- fread("./data_app1.csv")
+```
+
+
+
+
+```{r}
+fn <- funs(mean, sd, min, max, sum, n_distinct, .args = list(na.rm = TRUE))
+
+sum_bbalance <- bbalance %>%
+  mutate_if(is.character, funs(factor(.) %>% as.integer)) %>% 
+  group_by(SK_ID_BUREAU) %>% 
+  summarise_all(fn) 
+rm(bbalance); gc()
+```
+
+
+```{r}
+
+#glimpse(sum_bbalance)
+```
+
+
+
+```{r}
+
+sum_bureau <- bureau %>% 
+  left_join(sum_bbalance, by = "SK_ID_BUREAU") %>% 
+  select(-SK_ID_BUREAU) %>% 
+  mutate_if(is.character, funs(factor(.) %>% as.integer)) %>% 
+  group_by(SK_ID_CURR) %>% 
+  summarise_all(fn)
+rm(bureau, sum_bbalance); gc()
+
+```
+
+
+```{r}
+#glimpse(sum_bureau)
+```
+
+
+```{r}
+sum_cc_balance <- cc_balance %>% 
+  select(-SK_ID_PREV) %>% 
+  mutate_if(is.character, funs(factor(.) %>% as.integer)) %>% 
+  group_by(SK_ID_CURR) %>% 
+  summarise_all(fn)
+rm(cc_balance); gc()
+
+
+```
+
+
+```{r}
+sum_payments <- payments %>% 
+  select(-SK_ID_PREV) %>% 
+  mutate(PAYMENT_PERC = AMT_PAYMENT / AMT_INSTALMENT,
+         PAYMENT_DIFF = AMT_INSTALMENT - AMT_PAYMENT,
+         DPD = DAYS_ENTRY_PAYMENT - DAYS_INSTALMENT,
+         DBD = DAYS_INSTALMENT - DAYS_ENTRY_PAYMENT,
+         DPD = ifelse(DPD > 0, DPD, 0),
+         DBD = ifelse(DBD > 0, DBD, 0)) %>% 
+  group_by(SK_ID_CURR) %>% 
+  summarise_all(fn) 
+rm(payments); gc()
+
+
+```
+
+```{r}
+sum_pc_balance <- pc_balance %>% 
+  select(-SK_ID_PREV) %>% 
+  mutate_if(is.character, funs(factor(.) %>% as.integer)) %>% 
+  group_by(SK_ID_CURR) %>% 
+  summarise_all(fn)
+rm(pc_balance); gc()
+
+
+```
+
+```{r}
+sum_prev <- prev %>%
+  select(-SK_ID_PREV) %>% 
+  mutate_if(is.character, funs(factor(.) %>% as.integer)) %>% 
+  mutate(DAYS_FIRST_DRAWING = ifelse(DAYS_FIRST_DRAWING == 365243, NA, DAYS_FIRST_DRAWING),
+         DAYS_FIRST_DUE = ifelse(DAYS_FIRST_DUE == 365243, NA, DAYS_FIRST_DUE),
+         DAYS_LAST_DUE_1ST_VERSION = ifelse(DAYS_LAST_DUE_1ST_VERSION == 365243, NA, DAYS_LAST_DUE_1ST_VERSION),
+         DAYS_LAST_DUE = ifelse(DAYS_LAST_DUE == 365243, NA, DAYS_LAST_DUE),
+         DAYS_TERMINATION = ifelse(DAYS_TERMINATION == 365243, NA, DAYS_TERMINATION),
+         APP_CREDIT_PERC = AMT_APPLICATION / AMT_CREDIT) %>% 
+  group_by(SK_ID_CURR) %>% 
+  summarise_all(fn) 
+rm(prev); gc()
+
+```
+
+
+```{r}
+tr_te <- app %>% 
+  #select(-TARGET) %>% 
+  left_join(sum_bureau, by = "SK_ID_CURR") %>% 
+  left_join(sum_cc_balance, by = "SK_ID_CURR") %>% 
+  left_join(sum_payments, by = "SK_ID_CURR") %>% 
+  left_join(sum_pc_balance, by = "SK_ID_CURR") %>% 
+  left_join(sum_prev, by = "SK_ID_CURR") %>% 
+  select(-SK_ID_CURR, -V1) #%>% 
+  #mutate_if(is.character, funs(factor(.) %>% as.integer))
+#glimpse(tr_te)
+```
+
+```{r}
+missing_train <- as.data.frame(sort(sapply(tr_te , function(x) sum(is.na(x))),decreasing = T))                                                   
+colnames(missing_train)[1] <- "Num_Missing_values"
+missing_train$Percentage <- (missing_train$Num_Missing_values/nrow(tr_te))*100      
+missing_train$Variables <- rownames(missing_train)
+missing_train <- missing_train[c(3,1,2)] 
+rownames(missing_train)<-c()                                        
+
+missing_train<-missing_train%>%
+  filter(Percentage>20)
+ 
+ggplot(head(missing_train,50), aes(reorder(Variables,Percentage),Percentage,fill= Variables)) +
+  geom_bar(stat="identity")+
+  theme_minimal()+
+  coord_flip()+
+  theme( legend.position = "none")
+
+```
+
+```{r}
+missing_data <- as.data.frame(sort(sapply(tr_te, function(x) sum(is.na(x))),decreasing = T))                                                   
+colnames(missing_data)[1] <- "Missing_values"
+missing_data$Percentage <- (missing_data$Missing_values/nrow(tr_te))*100      
+missing_data$Variables <- rownames(missing_data)
+missing_data <- missing_data[c(3,1,2)] 
+rownames(missing_data)<-c()                                        
+head(missing_data, 10)
+
+```
+
+
+```{r}
+## Remove columns with more than 50% NA
+tr_te=tr_te[, -which(colMeans(is.na(tr_te)) > 0.5)]
+
+```
+
+
+
+```{r}
+missing_data <- as.data.frame(sort(sapply(tr_te, function(x) sum(is.na(x))),decreasing = T))                                                   
+colnames(missing_data)[1] <- "Missing_values"
+missing_data$Percentage <- (missing_data$Missing_values/nrow(tr_te))*100      
+missing_data$Variables <- rownames(missing_data)
+missing_data <- missing_data[c(3,1,2)] 
+rownames(missing_data)<-c()                                        
+head(missing_data,10)
+
+```
+
+```{r}
+string_2_factor_names <- tr_te %>%
+    select_if(is.character) %>%
+    names()
+
+string_2_factor_names
+```
+
+```{r}
+unique_numeric_values_tbl <-tr_te  %>%
+    select_if(is.numeric) %>%
+    map_df(~ unique(.) %>% length()) %>%
+    gather() %>%
+    arrange(value) %>%
+    mutate(key = as_factor(key))
+
+unique_numeric_values_tbl
+
+```
+
+
+```{r}
+factor_limit <- 7
+
+num_2_factor_names <- unique_numeric_values_tbl %>%
+    filter(value < factor_limit) %>%
+    arrange(desc(value)) %>%
+    pull(key) %>%
+    as.character()
+
+num_2_factor_names
+```
+
+
+```{r }
+rec_obj <- recipe(~ ., data = tr_te) %>%
+    step_string2factor(string_2_factor_names) %>%
+    step_num2factor(num_2_factor_names) %>%
+    step_meanimpute(all_numeric()) %>%
+    step_modeimpute(all_nominal()) %>%
+    prep(stringsAsFactors = FALSE)
+
+rec_obj
+```
+
+
+```{r }
+tr_te <- bake(rec_obj, tr_te)
+#glimpse(tr_te)
+```
+
+```{r}
+missing_data <- as.data.frame(sort(sapply(tr_te, function(x) sum(is.na(x))),decreasing = T))                                                   
+colnames(missing_data)[1] <- "Missing_values"
+missing_data$Percentage <- (missing_data$Missing_values/nrow(tr_te))*100      
+missing_data$Variables <- rownames(missing_data)
+missing_data <- missing_data[c(3,1,2)] 
+rownames(missing_data)<-c()                                        
+head(missing_data,10)
+
+```
+
+
+
+```{r}
+tr_te=tr_te%>% select(-APP_CREDIT_PERC_max,-PAYMENT_PERC_max)
+```
+
+
+```{r}
+#write.csv(tr_te, file='Joined_full_505features.csv')
+
+```
+
+```{r}
+#tr_te1=tr_te%>% select(selected)
+#y=tr_te%>%select(SK_ID_CURR, TARGET )
+```
+
+```{r}
+#TRAIN=bind_cols(y, tr_te1)
+#glimpse(TRAIN)
+```
+
+```{r}
+#write.csv(TRAIN, file='Joined_full_297features.csv')
+
+```
+
+```{r}
+missing_data <- as.data.frame(sort(sapply(tr_te, function(x) sum(is.na(x))),decreasing = T))                                                   
+colnames(missing_data)[1] <- "Missing_values"
+missing_data$Percentage <- (missing_data$Missing_values/nrow(tr_te))*100      
+missing_data$Variables <- rownames(missing_data)
+missing_data <- missing_data[c(3,1,2)] 
+rownames(missing_data)<-c()                                        
+head(missing_data,5)
+
+
+```
+
+```{r}
+#borruta_data=tr_te[1:30000,]
+#rm(app,   missing_data, missing_train, fn, sum_bureau, sum_cc_balance, 
+   #sum_payments, sum_pc_balance, sum_prev); gc()
+```
+
+```{r}
+#library(Boruta)
+#boruta <- Boruta(TARGET~., data = borruta_data, maxRuns = 50, doTrace = 2)
+#print(boruta)
+```
+
+```{r}
+#plot(boruta, xlab = "", xaxt = "n")
+#lz<-lapply(1:ncol(boruta$ImpHistory),function(i)
+  #boruta$ImpHistory[is.finite(boruta$ImpHistory[,i]),i])
+#names(lz) <- colnames(boruta$ImpHistory)
+#Labels <- sort(sapply(lz,median))
+#axis(side = 1,las=2,labels = names(Labels),
+     #at = 1:ncol(boruta$ImpHistory), cex.axis = 0.7)
+```
+
+
+```{r}
+#selected=getSelectedAttributes(boruta, withTentative = F)
+
+```
+
+
+```{r}
+#boruta_df <- attStats(boruta)
+#write.csv(boruta_df, file = "borutafulldata.csv")
+```
+
+
+

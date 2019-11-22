@@ -1,0 +1,345 @@
+---
+title: "Awesomeworksheet"
+author: "SIR"
+date: "September 1, 2019"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+#install.packages("tidyverse")
+#install.packages("mice")
+#install.packages("data.table")
+#install.packages("recipe")
+#install.packages("dplyr")
+```
+
+
+```{r setup, include=FALSE}
+library(tidyr)
+library(dplyr)
+library(data.table)
+library(skimr)
+library(recipes)
+library(ggplot2)
+library(purrr)
+library(sjmisc)
+library(haven)
+```
+
+
+###Loading both Train and Test data
+```{r }
+
+Train <- fread("./application_train.csv")
+#Test<-fread("./application_test.csv")
+```
+
+```{r }
+#pre_app<-fread("./previous_application.csv")
+#bur<-fread("./bureau.csv")
+#card_bal<-fread("./credit_card_balance.csv")
+#payment<-fread("./installments_payments.csv")
+#P<-fread("./POS_CASH_balance.csv")
+#bur_bal<-fread("./bureau_balance.csv")
+
+```
+
+##Observing Train data attributes
+```{r }
+#List variables in train data
+#names(Train)
+
+```
+
+```{r }
+# list the structure of Train data
+#glimpse(Train)
+```
+
+
+```{r}
+# print first 10 rows of Train data
+#head(Train, n=10)
+```
+
+```{r }
+#skim_to_list(Train)
+```
+
+```{r }
+#Checking for and removing duplicate variables and furtunately this dataset doesnot have dulicates
+Train=Train %>% distinct()
+```
+
+```{r }
+#Tackilng with cardinality
+Train[ORGANIZATION_TYPE=="Business Entity Type 1" | ORGANIZATION_TYPE=="Business Entity Type 2" | ORGANIZATION_TYPE=="Business Entity Type 3"]$ORGANIZATION_TYPE <- "Business Entity"
+
+Train[ORGANIZATION_TYPE=="Industry: type 1" | ORGANIZATION_TYPE=="Industry: type 2" | ORGANIZATION_TYPE=="Industry: type 3" | ORGANIZATION_TYPE=="Industry: type 4" | ORGANIZATION_TYPE=="Industry: type 5" | ORGANIZATION_TYPE=="Industry: type 6" | ORGANIZATION_TYPE=="Industry: type 7" | ORGANIZATION_TYPE=="Industry: type 8" | ORGANIZATION_TYPE=="Industry: type 9" | ORGANIZATION_TYPE=="Industry: type 10" | ORGANIZATION_TYPE=="Industry: type 11" | ORGANIZATION_TYPE=="Industry: type 12" | ORGANIZATION_TYPE=="Industry: type 13"]$ORGANIZATION_TYPE <- "Industry"
+
+Train[ORGANIZATION_TYPE=="Trade: type 1" | ORGANIZATION_TYPE=="Trade: type 2" | ORGANIZATION_TYPE=="Trade: type 3" | ORGANIZATION_TYPE=="Trade: type 4" | ORGANIZATION_TYPE=="Trade: type 5" | ORGANIZATION_TYPE=="Trade: type 6" | ORGANIZATION_TYPE=="Trade: type 7"]$ORGANIZATION_TYPE <- "Trade"
+
+Train[ORGANIZATION_TYPE=="Transport: type 1" | ORGANIZATION_TYPE=="Transport: type 2" | ORGANIZATION_TYPE=="Transport: type 3" | ORGANIZATION_TYPE=="Transport: type 4"]$ORGANIZATION_TYPE <- "Transport"
+
+#Convert categorical to ordinal
+Train[NAME_EDUCATION_TYPE=="Lower secondary"]$NAME_EDUCATION_TYPE <- '1'
+Train[NAME_EDUCATION_TYPE=="Secondary / secondary special"]$NAME_EDUCATION_TYPE <- '2'
+Train[NAME_EDUCATION_TYPE=="Incomplete higher"]$NAME_EDUCATION_TYPE <- '3'
+Train[NAME_EDUCATION_TYPE=="Higher education"]$NAME_EDUCATION_TYPE <- '4'
+Train[NAME_EDUCATION_TYPE=="Academic degree"]$NAME_EDUCATION_TYPE <- '5'
+Train$NAME_EDUCATION_TYPE <- as.numeric(Train$NAME_EDUCATION_TYPE)
+
+```
+
+## Calculating and checking for missing values within Train data
+
+
+Is it OK to use the variables like age, gender as an feature engineered version?
+```{r }
+missing_train <- as.data.frame(sort(sapply(Train, function(x) sum(is.na(x))),decreasing = T))                                                   
+colnames(missing_train)[1] <- "Num_Missing_values"
+missing_train$Percentage <- (missing_train$Num_Missing_values/nrow(Train))*100      
+missing_train$Variables <- rownames(missing_train)
+missing_train <- missing_train[c(3,1,2)] 
+rownames(missing_train)<-c()                                        
+
+missing_train<-missing_train%>%
+  filter(Percentage>20)
+ 
+ggplot(head(missing_train,40), aes(reorder(Variables,Percentage),Percentage,fill= Variables)) +
+  geom_bar(stat="identity")+
+  theme_minimal()+
+  coord_flip()+
+  theme( legend.position = "none")
+```
+
+```{r }
+train_less_missing = subset(Train, select = -c(COMMONAREA_AVG , COMMONAREA_MODE,COMMONAREA_MEDI, NONLIVINGAPARTMENTS_AVG,NONLIVINGAPARTMENTS_MODE,NONLIVINGAPARTMENTS_MEDI,LIVINGAPARTMENTS_AVG,  LIVINGAPARTMENTS_MODE ,LIVINGAPARTMENTS_MEDI, FLOORSMIN_AVG ,FLOORSMIN_MODE , OWN_CAR_AGE,  FLOORSMIN_MEDI, YEARS_BUILD_AVG,  YEARS_BUILD_MODE , YEARS_BUILD_MEDI , LANDAREA_AVG , LANDAREA_MODE, LANDAREA_MEDI, BASEMENTAREA_AVG ,BASEMENTAREA_MODE, BASEMENTAREA_MEDI,EXT_SOURCE_1,  NONLIVINGAREA_AVG,           NONLIVINGAREA_MODE, NONLIVINGAREA_MEDI , ELEVATORS_AVG, ELEVATORS_MODE,ELEVATORS_MEDI , APARTMENTS_AVG ,APARTMENTS_MODE,APARTMENTS_MEDI ,ENTRANCES_AVG , ENTRANCES_MODE,ENTRANCES_MEDI,LIVINGAREA_AVG ,            LIVINGAREA_MODE, LIVINGAREA_MEDI,FLOORSMAX_AVG, FLOORSMAX_MODE, FLOORSMAX_MEDI,YEARS_BEGINEXPLUATATION_AVG , YEARS_BEGINEXPLUATATION_MODE,YEARS_BEGINEXPLUATATION_MEDI,TOTALAREA_MODE, NAME_TYPE_SUITE, NAME_FAMILY_STATUS,CODE_GENDER            
+
+) )
+```
+
+
+
+
+```{r }
+#Feature Creation
+train_less_missing$employed_ratio_birth <- train_less_missing$DAYS_EMPLOYED / train_less_missing$DAYS_BIRTH
+train_less_missing$income_ratio_credit <- train_less_missing$AMT_INCOME_TOTAL / train_less_missing$AMT_CREDIT
+train_less_missing$income_ratio_famsize <- train_less_missing$AMT_INCOME_TOTAL / train_less_missing$CNT_FAM_MEMBERS
+train_less_missing$income_ration_annuity <- train_less_missing$AMT_INCOME_TOTAL / train_less_missing$AMT_ANNUITY
+train_less_missing$credit_ration_annuity <- train_less_missing$AMT_CREDIT /train_less_missing$AMT_ANNUITY
+train_less_missing$credit_ration_goods <- train_less_missing$AMT_CREDIT / train_less_missing$AMT_GOODS_PRICE
+train_less_missing$credit_minus_goods <- train_less_missing$AMT_CREDIT - train_less_missing$AMT_GOODS_PRICE
+train_less_missing$reg_ration_employed <- train_less_missing$DAYS_REGISTRATION / train_less_missing$DAYS_EMPLOYED
+train_less_missing$credit_ratio_annuity_ratio_employed <- train_less_missing$credit_ration_annuity / train_less_missing$DAYS_EMPLOYED
+train_less_missing$reg_ratio_idpublish <- train_less_missing$DAYS_REGISTRATION / train_less_missing$DAYS_ID_PUBLISH
+train_less_missing$reg_ratio_birth <- train_less_missing$DAYS_REGISTRATION / train_less_missing$DAYS_BIRTH
+train_less_missing$id_ratio_birth <- train_less_missing$DAYS_ID_PUBLISH / train_less_missing$DAYS_BIRTH
+train_less_missing$phone_ratio_birth <- train_less_missing$DAYS_LAST_PHONE_CHANGE / train_less_missing$DAYS_BIRTH
+train_less_missing$phone_ratio_employed <- train_less_missing$DAYS_LAST_PHONE_CHANGE / train_less_missing$DAYS_EMPLOYED
+
+train_less_missing$document_sum <- train_less_missing$FLAG_DOCUMENT_2 + train_less_missing$FLAG_DOCUMENT_3 + train_less_missing$FLAG_DOCUMENT_4 + train_less_missing$FLAG_DOCUMENT_5 + train_less_missing$FLAG_DOCUMENT_6 + train_less_missing$FLAG_DOCUMENT_7 + train_less_missing$FLAG_DOCUMENT_8 + train_less_missing$FLAG_DOCUMENT_9 + train_less_missing$FLAG_DOCUMENT_10 + train_less_missing$FLAG_DOCUMENT_11 + train_less_missing$FLAG_DOCUMENT_12 + train_less_missing$FLAG_DOCUMENT_13 + train_less_missing$FLAG_DOCUMENT_14 + train_less_missing$FLAG_DOCUMENT_15 + train_less_missing$FLAG_DOCUMENT_16 + train_less_missing$FLAG_DOCUMENT_17 + train_less_missing$FLAG_DOCUMENT_18 + train_less_missing$FLAG_DOCUMENT_19 + train_less_missing$FLAG_DOCUMENT_20 + train_less_missing$FLAG_DOCUMENT_21
+
+train_less_missing$sum_contact <- train_less_missing$FLAG_MOBIL +train_less_missing$FLAG_EMP_PHONE + train_less_missing$FLAG_WORK_PHONE + train_less_missing$FLAG_CONT_MOBILE + train_less_missing$FLAG_PHONE + train_less_missing$FLAG_EMAIL
+
+train_less_missing$reliability_city_in_city <- train_less_missing$REG_CITY_NOT_LIVE_CITY + train_less_missing$REG_CITY_NOT_WORK_CITY + train_less_missing$REG_REGION_NOT_LIVE_REGION + train_less_missing$REG_REGION_NOT_WORK_REGION + train_less_missing$LIVE_CITY_NOT_WORK_CITY + train_less_missing$LIVE_REGION_NOT_WORK_REGION
+
+train_less_missing$inquiries_total_month <- train_less_missing$AMT_REQ_CREDIT_BUREAU_HOUR + train_less_missing$AMT_REQ_CREDIT_BUREAU_DAY + train_less_missing$AMT_REQ_CREDIT_BUREAU_WEEK + train_less_missing$AMT_REQ_CREDIT_BUREAU_MON
+
+train_less_missing$credit_as_goods <- as.numeric(train_less_missing$AMT_CREDIT==train_less_missing$AMT_GOODS_PRICE)#if it is equal it means no insurance is taken
+
+
+
+
+```
+
+```{r}
+train_less_missing<-na.omit(train_less_missing, cols=c( 'OBS_30_CNT_SOCIAL_CIRCLE',
+                                              'DEF_30_CNT_SOCIAL_CIRCLE',                                                                          'OBS_60_CNT_SOCIAL_CIRCLE', 
+                                              'DEF_60_CNT_SOCIAL_CIRCLE',
+                                              'EXT_SOURCE_2',
+                                              'AMT_GOODS_PRICE',
+                                              'AMT_ANNUITY',
+                                              'phone_ratio_employed'))
+```
+
+
+
+```{r}
+missing_data <- as.data.frame(sort(sapply(train_less_missing, function(x) sum(is.na(x))),decreasing = T))                                                   
+colnames(missing_data)[1] <- "Missing_values"
+missing_data$Percentage <- (missing_data$Missing_values/nrow(train_less_missing))*100      
+missing_data$Variables <- rownames(missing_data)
+missing_data <- missing_data[c(3,1,2)] 
+rownames(missing_data)<-c()                                        
+head(missing_data, 20)
+
+```
+
+
+
+```{r}
+string_2_factor_names <- train_less_missing %>%
+    select_if(is.character) %>%
+    names()
+
+string_2_factor_names
+```
+
+
+```{r}
+unique_numeric_values_tbl <-train_less_missing  %>%
+    select_if(is.numeric) %>%
+    map_df(~ unique(.) %>% length()) %>%
+    gather() %>%
+    arrange(value) %>%
+    mutate(key = as_factor(key))
+
+unique_numeric_values_tbl
+```
+
+```{r}
+factor_limit <- 7
+
+num_2_factor_names <- unique_numeric_values_tbl %>%
+    filter(value < factor_limit) %>%
+    arrange(desc(value)) %>%
+    pull(key) %>%
+    as.character()
+
+num_2_factor_names
+```
+
+```{r}
+ #library(mice)
+#imputed_Data <- mice(train_less_missing, m=1, maxit=500, method='cart', seed=500)
+#summary(imputed_Data)
+```
+
+```{r }
+rec_obj <- recipe(~ ., data = train_less_missing) %>%
+    step_string2factor(string_2_factor_names) %>%
+    step_num2factor(num_2_factor_names) %>%
+    step_meanimpute(all_numeric()) %>%
+    step_modeimpute(all_nominal()) %>%
+    prep(stringsAsFactors = FALSE)
+
+rec_obj
+```
+
+```{r }
+train_new <- bake(rec_obj, train_less_missing)
+#glimpse(train_new)
+```
+
+```{r}
+missing_train2 <- as.data.frame(sort(sapply(train_new, function(x) sum(is.na(x))),decreasing = T))                                                   
+colnames(missing_train2)[1] <- "Num_Missing_values"
+missing_train2$Percentage <- (missing_train2$Num_Missing_values/nrow(train_new))*100      
+missing_train2$Variables <- rownames(missing_train2)
+missing_train2 <- missing_train2[c(3,1,2)] 
+rownames(missing_train2)<-c()                                        
+
+missing_train<-missing_train2%>%
+  filter(Percentage>20)
+ 
+ggplot(head(missing_train2,30), aes(reorder(Variables,Percentage),Percentage,fill= Variables)) +
+  geom_bar(stat="identity")+
+  theme_minimal()+
+  coord_flip()+
+  theme( legend.position = "none")
+
+```
+
+
+```{r}
+missing_data <- as.data.frame(sort(sapply(train_new, function(x) sum(is.na(x))),decreasing = T))                                                   
+colnames(missing_data)[1] <- "Missing_values"
+missing_data$Percentage <- (missing_data$Missing_values/nrow(train_new))*100      
+missing_data$Variables <- rownames(missing_data)
+missing_data <- missing_data[c(3,1,2)] 
+rownames(missing_data)<-c()                                        
+head(missing_data, 10)
+
+```
+
+```{r}
+#boruta <- Boruta(TARGET~., data = train_new2, doTrace = 2)
+#print(boruta)
+```
+
+
+```{r}
+#plot(boruta, xlab = "", xaxt = "n")
+#lz<-lapply(1:ncol(boruta$ImpHistory),function(i)
+  #boruta$ImpHistory[is.finite(boruta$ImpHistory[,i]),i])
+#names(lz) <- colnames(boruta$ImpHistory)
+#Labels <- sort(sapply(lz,median))
+#axis(side = 1,las=2,labels = names(Labels),
+     #at = 1:ncol(boruta$ImpHistory), cex.axis = 0.7)
+```
+
+
+```{r}
+rm(missing_data,missing_train, missing_train2, rec_obj, Train, train_less_missing)
+```
+
+
+
+```{r}
+#library(mice)
+#imputed_Data <- mice(train_new, m = 1, meth='cart', maxit = 5, seed = 500 )
+#summary(imputed_Data)
+```
+
+```{r }
+train_new = subset(train_new, select = -c(FLAG_OWN_REALTY,FLAG_MOBIL,FLAG_CONT_MOBILE,WEEKDAY_APPR_PROCESS_START,FLAG_DOCUMENT_2,FLAG_DOCUMENT_4,
+                                          FLAG_DOCUMENT_5,FLAG_DOCUMENT_7,FLAG_DOCUMENT_9,FLAG_DOCUMENT_10,FLAG_DOCUMENT_11,
+                                          FLAG_DOCUMENT_12,FLAG_DOCUMENT_13,FLAG_DOCUMENT_14,FLAG_DOCUMENT_15,FLAG_DOCUMENT_16,
+                                          FLAG_DOCUMENT_17,FLAG_DOCUMENT_18,FLAG_DOCUMENT_19,FLAG_DOCUMENT_20,FLAG_DOCUMENT_21,
+                                          AMT_REQ_CREDIT_BUREAU_HOUR,AMT_REQ_CREDIT_BUREAU_WEEK,AMT_REQ_CREDIT_BUREAU_MON,		
+                                          AMT_REQ_CREDIT_BUREAU_QRT,inquiries_total_month))
+
+```
+
+```{r }
+library(plotly)
+Target_pie<-train_new%>%
+group_by(TARGET)%>%
+  summarize(count=n())
+  
+p <- plot_ly(Target_pie, labels = ~TARGET, values = ~count, type = 'pie') %>%
+    layout(title = 'Target variable distribution')
+  
+  p
+```
+
+
+```{r }
+#Checking for missing values once again after fiiling them
+sum(is.na(train_new))
+```
+
+
+
+```{r}
+
+#write.csv(train_new, file = "data_app1.csv")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

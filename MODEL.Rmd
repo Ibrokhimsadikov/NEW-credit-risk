@@ -1,0 +1,303 @@
+---
+title: "Untitled"
+author: "SIR"
+date: "November 3, 2019"
+output: html_document
+---
+
+```{r include=FALSE}
+library(dplyr) 
+library(tidyr)
+library(data.table)
+library(skimr)
+library(recipes)
+library(ggplot2)
+library(purrr)
+library(data.table)
+library(skimr)
+library(recipes)
+library(ggplot2)
+library(sjmisc)
+library(haven)
+library(xgboost)
+library(caret)
+```
+
+
+```{r}
+# Save an object to a file
+#saveRDS(train_new, file = "my_data2.rds")
+# Restore the object
+df=readRDS(file = "my_data2.rds")
+#glimpse(df)
+```
+
+
+
+```{r}
+#dtrain <- xgb.DMatrix(data = train$data, label = train$label)
+app <- fread("./data_app1.csv")
+tri <- 1:nrow(app)
+y <- app$TARGET
+```
+
+
+```{r}
+df <- df %>% 
+  select(-TARGET, -SK_ID_CURR)
+```
+
+```{r}
+df=df %>% 
+  
+  data.matrix()
+
+```
+
+
+
+```{r}
+library(magrittr)
+dtest <- xgb.DMatrix(data = df[-tri, ])
+tr_te <- df[tri, ]
+tri <- caret::createDataPartition(y, p = 0.9, list = F) %>% c()
+dtrain <- xgb.DMatrix(data = df[tri, ], label = y[tri])
+dval <- xgb.DMatrix(data = df[-tri, ], label = y[-tri])
+cols <- colnames(df)
+
+#rm(tr_te, y, tri); gc()
+
+```
+
+
+```{r}
+p <- list(objective = "binary:logistic",
+          booster = "gbtree",
+          eval_metric = "auc",
+          nthread = 4,
+          eta = 0.05,
+          max_depth = 6,
+          min_child_weight = 30,
+          gamma = 0,
+          subsample = 0.85,
+          colsample_bytree = 0.7,
+          colsample_bylevel = 0.632,
+          alpha = 0,
+          lambda = 0,
+          nrounds = 2000)
+
+```
+
+
+
+
+
+```{r}
+set.seed(0)
+m_xgb <- xgb.train(p, dtrain, p$nrounds, list(val = dval), print_every_n = 50, early_stopping_rounds = 600)
+
+xgb.importance(cols, model=m_xgb) %>% 
+  xgb.plot.importance(top_n = 30)
+
+```
+
+USING MY WAY
+
+```{r}
+m_xgb
+```
+
+
+
+```{r}
+# Set the seed to create reproducible train and test sets
+set.seed(300)
+
+# Create a stratified random sample to create train and test sets
+# Reference the outcome variable
+trainIndex   <- createDataPartition(TRAIN$TARGET, p=0.75, list=FALSE)
+train        <- TRAIN[ trainIndex, ]
+test         <- TRAIN[-trainIndex, ]
+
+# Create separate vectors of our outcome variable for both our train and test sets
+# We'll use these to train and test our model later
+train.label  <- train$TARGET
+test.label   <- test$TARGET
+ 
+```
+
+
+```{r}
+
+
+```
+
+
+```{r}
+# Load the Matrix package
+library(Matrix)
+
+# Create sparse matrixes and perform One-Hot Encoding to create dummy variables
+dtrain  <- sparse.model.matrix(TARGET ~ .-1, data=train)
+dtest   <- sparse.model.matrix(TARGET ~ .-1, data=test)
+
+# View the number of rows and features of each set
+dim(dtrain)
+dim(dtest)
+```
+
+```{r}
+p <- list(objective = "binary:logistic",
+          booster = "gbtree",
+          eval_metric = "auc",
+          nthread = 4,
+          eta = 0.05,
+          max_depth = 6,
+          min_child_weight = 30,
+          gamma = 0,
+          subsample = 0.85,
+          colsample_bytree = 0.7,
+          colsample_bylevel = 0.632,
+          alpha = 0,
+          lambda = 0,
+          nrounds = 2000)
+
+```
+
+
+```{r}
+set.seed(0)
+m_xgb <- xgb.train(params=p, data=dtrain1, label =train.label, p$nrounds,  print_every_n = 50, early_stopping_rounds = 600)
+
+#xgb.importance(cols, model=m_xgb) %>% 
+  #xgb.plot.importance(top_n = 30)
+#list(val = dval),
+```
+
+```{r}
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+tr_te2=tr_te %>% 
+  select(selected)
+
+```
+
+```{r}
+#dtrain <- xgb.DMatrix(data = train$data, label = train$label)
+app <- fread("./data_app1.csv")
+tri <- 1:nrow(app)
+y <- app$TARGET
+```
+
+```{r}
+
+
+```
+
+
+```{r}
+tr_te2=tr_te2 %>% 
+  
+  data.matrix()
+
+```
+
+
+
+```{r}
+library(magrittr)
+dtest <- xgb.DMatrix(data = tr_te2[-tri, ])
+tr_te2 <- tr_te2[tri, ]
+tri <- caret::createDataPartition(y, p = 0.9, list = F) %>% c()
+dtrain <- xgb.DMatrix(data = tr_te2[tri, ], label = y[tri])
+dval <- xgb.DMatrix(data = tr_te2[-tri, ], label = y[-tri])
+cols <- colnames(tr_te2)
+
+#rm(tr_te, y, tri); gc()
+
+```
+
+
+```{r}
+p <- list(objective = "binary:logistic",
+          booster = "gbtree",
+          eval_metric = "auc",
+          nthread = 4,
+          eta = 0.05,
+          max_depth = 6,
+          min_child_weight = 30,
+          gamma = 0,
+          subsample = 0.85,
+          colsample_bytree = 0.7,
+          colsample_bylevel = 0.632,
+          alpha = 0,
+          lambda = 0,
+          nrounds = 2000)
+
+```
+
+
+
+
+
+```{r}
+set.seed(0)
+m_xgb2 <- xgb.train(p, dtrain, p$nrounds, list(val = dval), print_every_n = 50, early_stopping_rounds = 600)
+
+xgb.importance(cols, model=m_xgb2) %>% 
+  xgb.plot.importance(top_n = 30)
+
+```
+
+```{r}
+m_xgb2
+
+```
+
+
+
+
